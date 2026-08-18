@@ -20,6 +20,10 @@ export const SUPPORT_PRESENCE_CHANNEL = 'support-presence'
  */
 const GLOBAL_KEY = '__hcs_supabase_client__'
 const GLOBAL_ANON_KEY = '__hcs_supabase_anon_client__'
+const GLOBAL_CUSTOMER_AUTH_KEY = '__hcs_supabase_customer_auth_client__'
+
+/** Storage key that isolates the visitor's session from the admin's. */
+const CUSTOMER_AUTH_STORAGE_KEY = 'sb-customer-auth'
 
 type BrowserClient = ReturnType<typeof createBrowserClient<Database>>
 type AnonClient = ReturnType<typeof createAnonClient<Database>>
@@ -69,4 +73,35 @@ export function getAnonClient() {
     })
   }
   return g[GLOBAL_ANON_KEY]
+}
+
+/**
+ * Session-aware browser client used ONLY by the customer widget for
+ * sign-in / sign-up. It uses a distinct storage key so the visitor's session
+ * never collides with an admin session on the same domain. Chat operations
+ * keep using the anonymous client so the RLS rules stay unchanged.
+ */
+export function getCustomerAuthClient() {
+  if (!isSupabaseConfigured) {
+    throw new Error(
+      'Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.',
+    )
+  }
+  const g = globalThis as typeof globalThis & {
+    [GLOBAL_CUSTOMER_AUTH_KEY]?: BrowserClient
+  }
+  if (!g[GLOBAL_CUSTOMER_AUTH_KEY]) {
+    g[GLOBAL_CUSTOMER_AUTH_KEY] = createBrowserClient<Database>(
+      supabaseUrl,
+      supabaseAnonKey,
+      {
+        auth: {
+          autoRefreshToken: true,
+          persistSession: true,
+          storageKey: CUSTOMER_AUTH_STORAGE_KEY,
+        },
+      },
+    )
+  }
+  return g[GLOBAL_CUSTOMER_AUTH_KEY]
 }
