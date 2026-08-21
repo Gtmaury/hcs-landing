@@ -50,9 +50,8 @@ export async function POST(request: Request) {
       language,
     } = parsed.data
 
-    // 0. Check for an existing open conversation for this email.
-    //    If one already exists, return it instead of creating a duplicate.
-    const { data: existingConversation } = await service
+    // Check for an existing open conversation for this email.
+    const { data: existing } = await service
       .from('conversations')
       .select('*')
       .eq('customer_email', customerEmail)
@@ -61,15 +60,15 @@ export async function POST(request: Request) {
       .limit(1)
       .maybeSingle()
 
-    if (existingConversation) {
+    if (existing) {
       return NextResponse.json({
         success: true,
-        data: { conversation: existingConversation, welcomeMessage: null },
+        data: { conversation: existing, welcomeMessage: null },
       })
     }
 
-    // 1. Create the conversation.
-    const { data: conversation, error: conversationError } = await service
+    // Create the conversation.
+    const { data: conversation, error: convError } = await service
       .from('conversations')
       .insert({
         customer_name: customerName,
@@ -77,15 +76,21 @@ export async function POST(request: Request) {
         customer_phone: customerPhone || null,
         customer_location: customerLocation || null,
         customer_language: language,
+        status: 'open',
       })
       .select()
       .single()
-    if (conversationError || !conversation) {
-      throw conversationError ?? new Error('Could not create conversation')
+
+    if (convError || !conversation) {
+      console.error('Conversation create error:', convError)
+      return NextResponse.json(
+        { error: 'Could not create conversation' },
+        { status: 500 },
+      )
     }
 
-    // 2. Insert the automatic welcome message from the administration.
-    const { data: welcomeMessage, error: messageError } = await service
+    // Insert the automatic welcome message.
+    const { data: welcomeMessage, error: msgError } = await service
       .from('messages')
       .insert({
         conversation_id: conversation.id,
@@ -94,16 +99,18 @@ export async function POST(request: Request) {
       })
       .select()
       .single()
-    if (messageError || !welcomeMessage) {
-      throw messageError ?? new Error('Could not create welcome message')
+
+    if (msgError) {
+      console.error('Welcome message error:', msgError)
+      // Conversation was created; return it even if the welcome message failed.
     }
 
     return NextResponse.json({
       success: true,
-      data: { conversation, welcomeMessage },
+      data: { conversation, welcomeMessage: welcomeMessage ?? null },
     })
   } catch (error) {
-    console.error('Chat start error:', error)
+    console.error('Chat start API error:', error)
     return NextResponse.json(
       { error: 'Could not start the conversation' },
       { status: 500 },

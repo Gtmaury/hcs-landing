@@ -1,13 +1,16 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { toast } from 'sonner'
+
 import { useLanguage } from '@/context/language-context'
 import { useChat } from '@/hooks/use-chat'
-import { useAuth } from '@/hooks/use-auth'
+import { useCustomerAuth } from '@/hooks/use-customer-auth'
+import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 
 import { ChatHeader } from './chat-header'
-import { ChatStartForm } from './chat-start-form'
+import { CustomerAuthForm } from './customer-auth-form'
 import { MessageInput } from './message-input'
 import { MessageList } from './message-list'
 
@@ -20,37 +23,51 @@ interface ChatWindowProps {
 export function ChatWindow({ onClose, online, presenceReady }: ChatWindowProps) {
   const { language, t } = useLanguage()
   const chat = useChat()
-  const { profile, logout, loading: authLoading } = useAuth()
-  const [startError, setStartError] = useState<string | null>(null)
+  const auth = useCustomerAuth()
+  // Stable reference: `useChat` wraps this in `useCallback([])`.
+  const { startConversation: startChatConversation } = chat
+  const [startFailed, setStartFailed] = useState(false)
+  const startedRef = useRef(false)
 
-  // Clear stale chat session from localStorage when user is not logged in.
-  // This prevents being stuck in an old conversation without auth.
-  // Only run after auth has fully initialized (authLoading === false) to avoid
-  // clearing a valid session during the initial mount race condition.
-  useEffect(() => {
-    if (authLoading) return
-    if (!profile && chat.session) {
-      chat.resetConversation()
+  const startConversation = useCallback(async () => {
+    if (!auth.user) return
+    setStartFailed(false)
+    try {
+      await startChatConversation(
+        {
+          customerName: auth.user.name || 'Customer',
+          customerEmail: auth.user.email,
+          customerPhone: auth.user.phone,
+        },
+        language,
+      )
+    } catch {
+      setStartFailed(true)
+      toast.error(t('chat.startError'))
     }
-  }, [profile, chat.session, chat, authLoading])
+  }, [auth.user, startChatConversation, language, t])
 
-  const handleStart = useCallback(
-    async (input: {
-      customerName: string
-      customerEmail: string
-      customerPhone?: string
-    }) => {
-      setStartError(null)
-      try {
-        await chat.startConversation(input, language)
-      } catch (err) {
-        setStartError(
-          err instanceof Error ? err.message : 'Could not start the conversation',
-        )
-      }
-    },
-    [chat, language],
-  )
+  // Once authenticated, start the conversation automatically using the
+  // account's data (the old separate data-entry panel was removed).
+  useEffect(() => {
+    if (!auth.user) {
+      startedRef.current = false
+      return
+    }
+    if (chat.session) return
+    if (startedRef.current) return
+    startedRef.current = true
+    void startConversation()
+  }, [auth.user, chat.session, startConversation])
+
+  const handleSignOut = async () => {
+    try {
+      await auth.signOut()
+      chat.resetConversation()
+    } catch {
+      // Ignore sign-out failures.
+    }
+  }
 
   return (
     <div className="fixed bottom-24 right-6 z-50 flex h-[520px] max-h-[calc(100vh-8rem)] w-[380px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border bg-background shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-200">
@@ -60,32 +77,38 @@ export function ChatWindow({ onClose, online, presenceReady }: ChatWindowProps) 
         isClosed={chat.isClosed}
         onClose={onClose}
         onReset={chat.resetConversation}
-        onLogout={
-          profile
-            ? () => {
-                chat.resetConversation()
-                logout()
-                onClose()
-              }
-            : undefined
-        }
+        onSignOut={auth.user ? handleSignOut : undefined}
       />
 
-      {startError ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-4 text-center">
-          <p className="text-sm text-destructive">{startError}</p>
-          <button
-            onClick={() => {
-              setStartError(null)
-              chat.resetConversation()
-            }}
-            className="text-sm text-primary underline"
-          >
-            Try again
-          </button>
+      {auth.status === 'loading' ? (
+        <div className="flex flex-1 items-center justify-center">
+          <Spinner />
         </div>
+      ) : !auth.user ? (
+        <CustomerAuthForm
+          signIn={auth.signIn}
+          signUp={auth.signUp}
+          resendConfirmation={auth.resendConfirmation}
+        />
       ) : !chat.session ? (
-        <ChatStartForm onStart={handleStart} />
+        startFailed ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 p-4">
+            <p className="text-center text-sm text-muted-foreground">
+              {t('chat.startError')}
+            </p>
+            <Button
+              type="button"
+              onClick={startConversation}
+              className="w-full cursor-pointer bg-gradient-to-r from-[#D90429] to-[#FF4D6A] hover:from-[#B80324] hover:to-[#D90429]"
+            >
+              {t('chat.retry')}
+            </Button>
+          </div>
+        ) : (
+          <div className="flex flex-1 items-center justify-center">
+            <Spinner />
+          </div>
+        )
       ) : chat.loadingHistory ? (
         <div className="flex flex-1 items-center justify-center">
           <Spinner />

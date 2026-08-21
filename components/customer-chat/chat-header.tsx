@@ -11,7 +11,7 @@ interface ChatHeaderProps {
   isClosed: boolean
   onClose: () => void
   onReset: () => void
-  onLogout?: () => void
+  onSignOut?: () => void
 }
 
 export function ChatHeader({
@@ -20,7 +20,7 @@ export function ChatHeader({
   isClosed,
   onClose,
   onReset,
-  onLogout,
+  onSignOut,
 }: ChatHeaderProps) {
   const { language, setLanguage, t } = useLanguage()
 
@@ -76,19 +76,6 @@ export function ChatHeader({
         >
           <Globe className="size-4" />
         </Button>
-        {onLogout && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            onClick={onLogout}
-            aria-label={t('auth.user.logout')}
-            title={t('auth.user.logout')}
-            className="cursor-pointer text-white hover:bg-white/20 hover:text-white"
-          >
-            <LogOut className="size-4" />
-          </Button>
-        )}
         {isClosed && (
           <Button
             type="button"
@@ -100,6 +87,19 @@ export function ChatHeader({
             className="cursor-pointer text-white hover:bg-white/20 hover:text-white"
           >
             <RotateCcw className="size-4" />
+          </Button>
+        )}
+        {onSignOut && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={onSignOut}
+            aria-label={t('chat.auth.signOut')}
+            title={t('chat.auth.signOut')}
+            className="cursor-pointer text-white hover:bg-white/20 hover:text-white"
+          >
+            <LogOut className="size-4" />
           </Button>
         )}
         <Button
