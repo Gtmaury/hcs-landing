@@ -3,7 +3,7 @@ import { SiteConfig } from "@/types/site.types"
 export const siteConfig: SiteConfig = {
   name: "HCS trading",
   shortName: "HCS trading",
-  email: "info@hcstradingllc.org",
+  email: "info@hcstrading.org",
   website: "www.hcstrading.org",
   location: "Miami, Florida, USA",
   phones: {
